@@ -1,0 +1,57 @@
+[package]
+name = "pumpfun-copy"
+version = "0.1.1"
+edition = "2021"
+
+[dependencies]
+anyhow = { version = "1.0", features = ["backtrace"] }
+solana-client = "1.16"
+solana-sdk = "1.16"
+solana-program = "1.16"
+solana-account-decoder = "1.16"
+solana-transaction-status = "1.16"
+spl-token = "4.0"
+spl-associated-token-account = "2.2"
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"
+tokio = { version = "1.0", features = ["full"] }
+futures = "0.3"
+futures-util = "0.3"
+log = "0.4.17"
+tracing = "0.1"
+tracing-subscriber = "0.3"
+chrono = "0.4"
+dotenvy = "0.15"
+bs58 = "0.5"
+borsh = { version = "1.5", features = ["derive"] }
+borsh-derive = "1.5"
+base64 = "0.21"
+anchor-client = "0.30.1"
+anchor-spl = "0.30.1"
+pumpfun = "3.0.1"
+scopeguard = "1.2"
+reqwest = { version = "0.11", features = ["json"] }
+bincode = "1.3"
+
+# Downgrade tonic and related dependencies
+tonic = "0.10"
+tonic-health = "0.10"
+prost = "0.12"
+tokio-stream = "0.1"
+async-stream = "0.3"
+
+# Use specific versions of tonic and yellowstone that are compatible
+yellowstone-grpc-client = "1.14.2+solana.1.16.21"
+yellowstone-grpc-proto = "1.14.2+solana.1.16.21"
+
+maplit = "1.0"
+backoff = { version = "0.4", features = ["tokio"] }
+
+clap = { version = "4.4", features = ["derive"] }
+
+[target.'cfg(windows)'.dependencies]
+windows-sys = { version = "0.48", features = [
+    "Win32_Foundation",
+    "Win32_System_WindowsProgramming",
+    "Win32_Storage_FileSystem"
+]}

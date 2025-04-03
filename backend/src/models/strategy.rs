@@ -1,10 +1,12 @@
+use bson::{doc, Document};
 use chrono::{DateTime, Utc};
+use mongodb::{Collection, Database};
 use serde::{Deserialize, Serialize};
-use sqlx::PgPool;
 use uuid::Uuid;
 
 #[derive(Debug, Serialize, Deserialize)]
 pub struct Strategy {
+    #[serde(rename = "_id")]
     pub id: Uuid,
     pub user_id: Uuid,
     pub name: String,
@@ -24,33 +26,23 @@ pub struct Strategy {
 }
 
 impl Strategy {
-    pub async fn find_by_user(pool: &PgPool, user_id: Uuid) -> Result<Vec<Self>, sqlx::Error> {
-        sqlx::query_as!(
-            Self,
-            r#"
-            SELECT * FROM strategies WHERE user_id = $1
-            "#,
-            user_id
-        )
-        .fetch_all(pool)
-        .await
+    pub fn collection(db: &Database) -> Collection<Self> {
+        db.collection::<Self>("strategies")
     }
 
-    pub async fn find_by_id(pool: &PgPool, id: Uuid, user_id: Uuid) -> Result<Option<Self>, sqlx::Error> {
-        sqlx::query_as!(
-            Self,
-            r#"
-            SELECT * FROM strategies WHERE id = $1 AND user_id = $2
-            "#,
-            id,
-            user_id
-        )
-        .fetch_optional(pool)
-        .await
+    pub async fn find_by_user(db: &Database, user_id: Uuid) -> Result<Vec<Self>, mongodb::error::Error> {
+        let filter = doc! { "user_id": user_id };
+        let cursor = Self::collection(db).find(filter, None).await?;
+        cursor.try_collect().await
+    }
+
+    pub async fn find_by_id(db: &Database, id: Uuid, user_id: Uuid) -> Result<Option<Self>, mongodb::error::Error> {
+        let filter = doc! { "_id": id, "user_id": user_id };
+        Self::collection(db).find_one(filter, None).await
     }
 
     pub async fn create(
-        pool: &PgPool,
+        db: &Database,
         user_id: Uuid,
         name: &str,
         strategy_type: &str,
@@ -64,25 +56,15 @@ impl Strategy {
         risk_alerts: bool,
         transaction_delay: i32,
         trade_frequency: i32,
-    ) -> Result<Self, sqlx::Error> {
-        sqlx::query_as!(
-            Self,
-            r#"
-            INSERT INTO strategies (
-                id, user_id, name, strategy_type, trading_pair, execution_platform,
-                min_trade_size, max_trade_size, max_daily_volume, auto_trading,
-                stealth_mode, risk_alerts, transaction_delay, trade_frequency,
-                created_at, updated_at
-            )
-            VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16)
-            RETURNING *
-            "#,
-            Uuid::new_v4(),
+    ) -> Result<Self, mongodb::error::Error> {
+        let now = Utc::now();
+        let strategy = Self {
+            id: Uuid::new_v4(),
             user_id,
-            name,
-            strategy_type,
-            trading_pair,
-            execution_platform,
+            name: name.to_string(),
+            strategy_type: strategy_type.to_string(),
+            trading_pair: trading_pair.to_string(),
+            execution_platform: execution_platform.to_string(),
             min_trade_size,
             max_trade_size,
             max_daily_volume,
@@ -91,15 +73,16 @@ impl Strategy {
             risk_alerts,
             transaction_delay,
             trade_frequency,
-            Utc::now(),
-            Utc::now()
-        )
-        .fetch_one(pool)
-        .await
+            created_at: now,
+            updated_at: now,
+        };
+
+        Self::collection(db).insert_one(&strategy, None).await?;
+        Ok(strategy)
     }
 
     pub async fn update(
-        pool: &PgPool,
+        db: &Database,
         id: Uuid,
         user_id: Uuid,
         name: &str,
@@ -114,35 +97,34 @@ impl Strategy {
         risk_alerts: bool,
         transaction_delay: i32,
         trade_frequency: i32,
-    ) -> Result<Self, sqlx::Error> {
-        sqlx::query_as!(
-            Self,
-            r#"
-            UPDATE strategies
-            SET name = $3, strategy_type = $4, trading_pair = $5, execution_platform = $6,
-                min_trade_size = $7, max_trade_size = $8, max_daily_volume = $9, auto_trading = $10,
-                stealth_mode = $11, risk_alerts = $12, transaction_delay = $13, trade_frequency = $14,
-                updated_at = $15
-            WHERE id = $1 AND user_id = $2
-            RETURNING *
-            "#,
-            id,
-            user_id,
-            name,
-            strategy_type,
-            trading_pair,
-            execution_platform,
-            min_trade_size,
-            max_trade_size,
-            max_daily_volume,
-            auto_trading,
-            stealth_mode,
-            risk_alerts,
-            transaction_delay,
-            trade_frequency,
-            Utc::now()
-        )
-        .fetch_one(pool)
-        .await
+    ) -> Result<Self, mongodb::error::Error> {
+        let filter = doc! { "_id": id, "user_id": user_id };
+        let now = Utc::now();
+        
+        let update = doc! {
+            "$set": {
+                "name": name,
+                "strategy_type": strategy_type,
+                "trading_pair": trading_pair,
+                "execution_platform": execution_platform,
+                "min_trade_size": min_trade_size,
+                "max_trade_size": max_trade_size,
+                "max_daily_volume": max_daily_volume,
+                "auto_trading": auto_trading,
+                "stealth_mode": stealth_mode,
+                "risk_alerts": risk_alerts,
+                "transaction_delay": transaction_delay,
+                "trade_frequency": trade_frequency,
+                "updated_at": now
+            }
+        };
+
+        Self::collection(db).update_one(filter.clone(), update, None).await?;
+        
+        // Fetch the updated document
+        let updated = Self::collection(db).find_one(filter, None).await?
+            .ok_or_else(|| mongodb::error::Error::from(mongodb::error::ErrorKind::InvalidArgument { message: "Strategy not found after update".into() }))?;
+        
+        Ok(updated)
     }
 } 

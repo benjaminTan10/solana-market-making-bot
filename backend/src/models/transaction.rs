@@ -1,10 +1,12 @@
+use bson::{doc, Document};
 use chrono::{DateTime, Utc};
+use mongodb::{Collection, Database};
 use serde::{Deserialize, Serialize};
-use sqlx::PgPool;
 use uuid::Uuid;
 
 #[derive(Debug, Serialize, Deserialize)]
 pub struct Transaction {
+    #[serde(rename = "_id")]
     pub id: Uuid,
     pub user_id: Uuid,
     pub wallet_id: Uuid,
@@ -19,41 +21,34 @@ pub struct Transaction {
 }
 
 impl Transaction {
-    pub async fn find_by_user(pool: &PgPool, user_id: Uuid, limit: i64) -> Result<Vec<Self>, sqlx::Error> {
-        sqlx::query_as!(
-            Self,
-            r#"
-            SELECT * FROM transactions 
-            WHERE user_id = $1
-            ORDER BY created_at DESC
-            LIMIT $2
-            "#,
-            user_id,
-            limit
-        )
-        .fetch_all(pool)
-        .await
+    pub fn collection(db: &Database) -> Collection<Self> {
+        db.collection::<Self>("transactions")
     }
 
-    pub async fn find_by_wallet(pool: &PgPool, wallet_id: Uuid, user_id: Uuid, limit: i64) -> Result<Vec<Self>, sqlx::Error> {
-        sqlx::query_as!(
-            Self,
-            r#"
-            SELECT * FROM transactions 
-            WHERE wallet_id = $1 AND user_id = $2
-            ORDER BY created_at DESC
-            LIMIT $3
-            "#,
-            wallet_id,
-            user_id,
-            limit
-        )
-        .fetch_all(pool)
-        .await
+    pub async fn find_by_user(db: &Database, user_id: Uuid, limit: i64) -> Result<Vec<Self>, mongodb::error::Error> {
+        let filter = doc! { "user_id": user_id };
+        let options = mongodb::options::FindOptions::builder()
+            .sort(doc! { "created_at": -1 })
+            .limit(limit)
+            .build();
+            
+        let cursor = Self::collection(db).find(filter, options).await?;
+        cursor.try_collect().await
+    }
+
+    pub async fn find_by_wallet(db: &Database, wallet_id: Uuid, user_id: Uuid, limit: i64) -> Result<Vec<Self>, mongodb::error::Error> {
+        let filter = doc! { "wallet_id": wallet_id, "user_id": user_id };
+        let options = mongodb::options::FindOptions::builder()
+            .sort(doc! { "created_at": -1 })
+            .limit(limit)
+            .build();
+            
+        let cursor = Self::collection(db).find(filter, options).await?;
+        cursor.try_collect().await
     }
 
     pub async fn create(
-        pool: &PgPool,
+        db: &Database,
         user_id: Uuid,
         wallet_id: Uuid,
         action: &str,
@@ -63,30 +58,22 @@ impl Transaction {
         status: &str,
         slippage: Option<f64>,
         transaction_hash: Option<&str>,
-    ) -> Result<Self, sqlx::Error> {
-        sqlx::query_as!(
-            Self,
-            r#"
-            INSERT INTO transactions (
-                id, user_id, wallet_id, action, amount, token, price, 
-                status, slippage, transaction_hash, created_at
-            )
-            VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
-            RETURNING *
-            "#,
-            Uuid::new_v4(),
+    ) -> Result<Self, mongodb::error::Error> {
+        let transaction = Self {
+            id: Uuid::new_v4(),
             user_id,
             wallet_id,
-            action,
+            action: action.to_string(),
             amount,
-            token,
+            token: token.to_string(),
             price,
-            status,
+            status: status.to_string(),
             slippage,
-            transaction_hash,
-            Utc::now()
-        )
-        .fetch_one(pool)
-        .await
+            transaction_hash: transaction_hash.map(|s| s.to_string()),
+            created_at: Utc::now(),
+        };
+
+        Self::collection(db).insert_one(&transaction, None).await?;
+        Ok(transaction)
     }
 } 

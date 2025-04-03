@@ -1,5 +1,5 @@
 use serde::{Deserialize, Serialize};
-use sqlx::PgPool;
+use mongodb::Database;
 use uuid::Uuid;
 
 #[derive(Debug, Serialize, Deserialize)]
@@ -32,7 +32,7 @@ pub struct MarketPrice {
 
 // For now, we'll use mock data since we're not connecting to a real exchange
 impl OrderBook {
-    pub async fn get_order_book(_pool: &PgPool, market_pair: &str) -> Result<Self, anyhow::Error> {
+    pub async fn get_order_book(_db: &Database, market_pair: &str) -> Result<Self, anyhow::Error> {
         // In a real implementation, this would fetch data from an exchange API
         // For now, we'll generate mock data
         let now = chrono::Utc::now();
@@ -85,7 +85,7 @@ impl OrderBook {
         })
     }
     
-    pub async fn get_market_price(_pool: &PgPool, market_pair: &str) -> Result<MarketPrice, anyhow::Error> {
+    pub async fn get_market_price(_db: &Database, market_pair: &str) -> Result<MarketPrice, anyhow::Error> {
         // In a real implementation, this would fetch data from an exchange API
         let now = chrono::Utc::now();
         let base_price = match market_pair {

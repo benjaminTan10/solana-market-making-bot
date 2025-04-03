@@ -1,10 +1,12 @@
+use bson::{doc, Document};
 use chrono::{DateTime, Utc};
+use mongodb::{Collection, Database};
 use serde::{Deserialize, Serialize};
-use sqlx::PgPool;
 use uuid::Uuid;
 
 #[derive(Debug, Serialize, Deserialize)]
 pub struct Wallet {
+    #[serde(rename = "_id")]
     pub id: Uuid,
     pub user_id: Uuid,
     pub address: String,
@@ -16,71 +18,47 @@ pub struct Wallet {
 }
 
 impl Wallet {
-    pub async fn find_by_user(pool: &PgPool, user_id: Uuid) -> Result<Vec<Self>, sqlx::Error> {
-        sqlx::query_as!(
-            Self,
-            r#"
-            SELECT * FROM wallets WHERE user_id = $1
-            "#,
-            user_id
-        )
-        .fetch_all(pool)
-        .await
+    pub fn collection(db: &Database) -> Collection<Self> {
+        db.collection::<Self>("wallets")
     }
 
-    pub async fn find_by_id(pool: &PgPool, id: Uuid, user_id: Uuid) -> Result<Option<Self>, sqlx::Error> {
-        sqlx::query_as!(
-            Self,
-            r#"
-            SELECT * FROM wallets WHERE id = $1 AND user_id = $2
-            "#,
-            id,
-            user_id
-        )
-        .fetch_optional(pool)
-        .await
+    pub async fn find_by_user(db: &Database, user_id: Uuid) -> Result<Vec<Self>, mongodb::error::Error> {
+        let filter = doc! { "user_id": user_id };
+        let cursor = Self::collection(db).find(filter, None).await?;
+        cursor.try_collect().await
+    }
+
+    pub async fn find_by_id(db: &Database, id: Uuid, user_id: Uuid) -> Result<Option<Self>, mongodb::error::Error> {
+        let filter = doc! { "_id": id, "user_id": user_id };
+        Self::collection(db).find_one(filter, None).await
     }
 
     pub async fn create(
-        pool: &PgPool,
+        db: &Database,
         user_id: Uuid,
         address: &str,
         label: Option<&str>,
         allocation_percentage: Option<f64>,
-    ) -> Result<Self, sqlx::Error> {
-        let allocation = allocation_percentage.unwrap_or(0.0);
-        
-        sqlx::query_as!(
-            Self,
-            r#"
-            INSERT INTO wallets (id, user_id, address, label, allocation_percentage, status, created_at, updated_at)
-            VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
-            RETURNING *
-            "#,
-            Uuid::new_v4(),
+    ) -> Result<Self, mongodb::error::Error> {
+        let now = Utc::now();
+        let wallet = Self {
+            id: Uuid::new_v4(),
             user_id,
-            address,
-            label,
-            allocation,
-            "Active",
-            Utc::now(),
-            Utc::now()
-        )
-        .fetch_one(pool)
-        .await
+            address: address.to_string(),
+            label: label.map(|s| s.to_string()),
+            allocation_percentage: allocation_percentage.unwrap_or(0.0),
+            status: "Active".to_string(),
+            created_at: now,
+            updated_at: now,
+        };
+
+        Self::collection(db).insert_one(&wallet, None).await?;
+        Ok(wallet)
     }
 
-    pub async fn delete(pool: &PgPool, id: Uuid, user_id: Uuid) -> Result<(), sqlx::Error> {
-        sqlx::query!(
-            r#"
-            DELETE FROM wallets WHERE id = $1 AND user_id = $2
-            "#,
-            id,
-            user_id
-        )
-        .execute(pool)
-        .await?;
-
+    pub async fn delete(db: &Database, id: Uuid, user_id: Uuid) -> Result<(), mongodb::error::Error> {
+        let filter = doc! { "_id": id, "user_id": user_id };
+        Self::collection(db).delete_one(filter, None).await?;
         Ok(())
     }
 } 

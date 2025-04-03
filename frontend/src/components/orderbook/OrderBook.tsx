@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
@@ -6,82 +5,32 @@ import { Switch } from "@/components/ui/switch";
 import { Label } from "@/components/ui/label";
 import { Slider } from "@/components/ui/slider";
 import { cn } from '@/lib/utils';
-
-// Mock data for the order book
-const generateMockOrders = (side: 'bid' | 'ask', basePrice: number = 150) => {
-  const orders = [];
-  const levels = 15;
-  const step = side === 'ask' ? 0.1 : -0.1;
-  
-  for (let i = 0; i < levels; i++) {
-    // Price calculation with some random variation
-    const price = basePrice + (i + 1) * step * (1 + (Math.random() * 0.1 - 0.05));
-    
-    // Volume calculation: higher near the mid price, lower far from it
-    let size = 10 + Math.random() * 100 * (1 - i / levels * 0.7);
-    if (Math.random() > 0.85) size *= 3; // Occasionally larger orders
-    
-    // Whether this is a bot order
-    const isBot = Math.random() > 0.65;
-    
-    orders.push({
-      price: price.toFixed(2),
-      size: size.toFixed(2),
-      total: (price * size).toFixed(2),
-      isBot,
-      pulseIntensity: isBot ? Math.random() : 0,
-    });
-  }
-  
-  return orders;
-};
+import { marketService } from '@/services/market';
+import { useQuery } from '@tanstack/react-query';
 
 export function OrderBook() {
-  const [midPrice] = useState(149.72);
-  const [askOrders, setAskOrders] = useState(() => 
-    generateMockOrders('ask', midPrice)
-  );
-  const [bidOrders, setBidOrders] = useState(() => 
-    generateMockOrders('bid', midPrice)
-  );
   const [showBotOrders, setShowBotOrders] = useState(true);
-  const [animationSpeed, setAnimationSpeed] = useState([50]); // 0-100 scale
+  const [animationSpeed, setAnimationSpeed] = useState([50]);
 
-  // Function to update the mock data with slight price changes
-  useEffect(() => {
-    const updateInterval = setInterval(() => {
-      // Update asks
-      setAskOrders(prev => 
-        prev.map(order => ({
-          ...order,
-          price: (parseFloat(order.price) + (Math.random() - 0.5) * 0.05).toFixed(2),
-          size: (parseFloat(order.size) + (Math.random() - 0.5) * 2).toFixed(2),
-          total: ((parseFloat(order.price) + (Math.random() - 0.5) * 0.05) * 
-                 (parseFloat(order.size) + (Math.random() - 0.5) * 2)).toFixed(2),
-          pulseIntensity: order.isBot ? Math.random() : 0,
-        }))
-      );
-      
-      // Update bids
-      setBidOrders(prev => 
-        prev.map(order => ({
-          ...order,
-          price: (parseFloat(order.price) + (Math.random() - 0.5) * 0.05).toFixed(2),
-          size: (parseFloat(order.size) + (Math.random() - 0.5) * 2).toFixed(2),
-          total: ((parseFloat(order.price) + (Math.random() - 0.5) * 0.05) * 
-                 (parseFloat(order.size) + (Math.random() - 0.5) * 2)).toFixed(2),
-          pulseIntensity: order.isBot ? Math.random() : 0,
-        }))
-      );
-    }, 2000 - (animationSpeed[0] * 15)); // Adjust update frequency based on speed
-    
-    return () => clearInterval(updateInterval);
-  }, [animationSpeed]);
+  // Fetch order book data using React Query
+  const { data: orderBook, isLoading, error } = useQuery({
+    queryKey: ['orderBook', 'SOL/USDC'],
+    queryFn: () => marketService.getOrderBook('SOL/USDC'),
+    refetchInterval: 2000 - (animationSpeed[0] * 15), // Adjust update frequency based on speed
+  });
+
+  if (isLoading) {
+    return <div>Loading...</div>;
+  }
+
+  if (error) {
+    return <div>Error loading order book</div>;
+  }
 
   // Find max size for scaling the depth visualization
   const maxSize = Math.max(
-    ...askOrders.map(o => parseFloat(o.size)),
-    ...bidOrders.map(o => parseFloat(o.size))
+    ...orderBook.asks.map(o => o.size),
+    ...orderBook.bids.map(o => o.size)
   );
 
   return (
@@ -129,11 +78,11 @@ export function OrderBook() {
         
         {/* ASKS (sell orders) */}
         <div className="mb-4">
-          {askOrders
+          {orderBook.asks
             .sort((a, b) => parseFloat(b.price) - parseFloat(a.price))
             .map((order, i) => {
               // Don't show bot orders if the option is disabled
-              if (!showBotOrders && order.isBot) return null;
+              if (!showBotOrders && order.is_bot) return null;
               
               const depth = (parseFloat(order.size) / maxSize) * 100;
               
@@ -145,11 +94,11 @@ export function OrderBook() {
                   <div 
                     className={cn(
                       "orderbook-ask absolute top-0 right-0 h-full",
-                      order.isBot && showBotOrders && "border-solana-purple"
+                      order.is_bot && showBotOrders && "border-solana-purple"
                     )}
                     style={{ 
                       width: `${depth}%`,
-                      opacity: order.isBot && showBotOrders ? 0.7 + order.pulseIntensity * 0.3 : 0.5 
+                      opacity: order.is_bot && showBotOrders ? 0.7 + order.pulse_intensity * 0.3 : 0.5 
                     }}
                   />
                   <span className="z-10 text-destructive font-mono">${order.price}</span>
@@ -162,16 +111,16 @@ export function OrderBook() {
         
         {/* Mid price */}
         <div className="py-1 px-2 bg-muted/20 mb-4 text-center font-mono text-sm">
-          ${midPrice.toFixed(2)}
+          ${orderBook.mid_price.toFixed(2)}
         </div>
         
         {/* BIDS (buy orders) */}
         <div>
-          {bidOrders
+          {orderBook.bids
             .sort((a, b) => parseFloat(b.price) - parseFloat(a.price))
             .map((order, i) => {
               // Don't show bot orders if the option is disabled
-              if (!showBotOrders && order.isBot) return null;
+              if (!showBotOrders && order.is_bot) return null;
               
               const depth = (parseFloat(order.size) / maxSize) * 100;
               
@@ -183,11 +132,11 @@ export function OrderBook() {
                   <div 
                     className={cn(
                       "orderbook-bid absolute top-0 right-0 h-full",
-                      order.isBot && showBotOrders && "border-solana-purple"
+                      order.is_bot && showBotOrders && "border-solana-purple"
                     )}
                     style={{ 
                       width: `${depth}%`,
-                      opacity: order.isBot && showBotOrders ? 0.7 + order.pulseIntensity * 0.3 : 0.5
+                      opacity: order.is_bot && showBotOrders ? 0.7 + order.pulse_intensity * 0.3 : 0.5
                     }}
                   />
                   <span className="z-10 text-solana-green font-mono">${order.price}</span>

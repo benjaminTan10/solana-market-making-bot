@@ -1,4 +1,4 @@
-use sqlx::PgPool;
+use mongodb::Database;
 use uuid::Uuid;
 use solana_client::rpc_client::RpcClient;
 use solana_sdk::pubkey::Pubkey;
@@ -8,15 +8,15 @@ use crate::utils::errors::ServiceError;
 use crate::config::Config;
 
 pub async fn get_wallets(
-    pool: &PgPool,
+    db: &Database,
     user_id: Uuid,
 ) -> Result<Vec<Wallet>, ServiceError> {
-    let wallets = Wallet::find_by_user(pool, user_id).await?;
+    let wallets = Wallet::find_by_user(db, user_id).await?;
     Ok(wallets)
 }
 
 pub async fn add_wallet(
-    pool: &PgPool,
+    db: &Database,
     user_id: Uuid,
     address: &str,
     label: Option<&str>,
@@ -28,31 +28,31 @@ pub async fn add_wallet(
     }
     
     // Create the wallet
-    let wallet = Wallet::create(pool, user_id, address, label, allocation_percentage).await?;
+    let wallet = Wallet::create(db, user_id, address, label, allocation_percentage).await?;
     Ok(wallet)
 }
 
 pub async fn remove_wallet(
-    pool: &PgPool,
+    db: &Database,
     user_id: Uuid,
     wallet_id: Uuid,
 ) -> Result<(), ServiceError> {
     // Check if wallet exists and belongs to user
-    let wallet = Wallet::find_by_id(pool, wallet_id, user_id).await?
+    let wallet = Wallet::find_by_id(db, wallet_id, user_id).await?
         .ok_or_else(|| ServiceError::NotFound("Wallet not found".into()))?;
     
     // Delete the wallet
-    Wallet::delete(pool, wallet_id, user_id).await?;
+    Wallet::delete(db, wallet_id, user_id).await?;
     Ok(())
 }
 
 pub async fn get_wallet_balance(
-    pool: &PgPool,
+    db: &Database,
     user_id: Uuid,
     wallet_id: Uuid,
 ) -> Result<f64, ServiceError> {
     // Check if wallet exists and belongs to user
-    let wallet = Wallet::find_by_id(pool, wallet_id, user_id).await?
+    let wallet = Wallet::find_by_id(db, wallet_id, user_id).await?
         .ok_or_else(|| ServiceError::NotFound("Wallet not found".into()))?;
     
     // In a real implementation, we would query the Solana blockchain

@@ -1,4 +1,4 @@
-use sqlx::PgPool;
+use mongodb::Database;
 use uuid::Uuid;
 
 use crate::api::alerts::AlertRequest;
@@ -6,15 +6,15 @@ use crate::models::alert::Alert;
 use crate::utils::errors::ServiceError;
 
 pub async fn get_alerts(
-    pool: &PgPool,
+    db: &Database,
     user_id: Uuid,
 ) -> Result<Vec<Alert>, ServiceError> {
-    let alerts = Alert::find_by_user(pool, user_id).await?;
+    let alerts = Alert::find_by_user(db, user_id).await?;
     Ok(alerts)
 }
 
 pub async fn create_alert(
-    pool: &PgPool,
+    db: &Database,
     user_id: Uuid,
     req: AlertRequest,
 ) -> Result<Alert, ServiceError> {
@@ -35,7 +35,7 @@ pub async fn create_alert(
     
     // Create the alert
     let alert = Alert::create(
-        pool,
+        db,
         user_id,
         &req.alert_type,
         &req.market_pair,
@@ -49,11 +49,11 @@ pub async fn create_alert(
 }
 
 pub async fn delete_alert(
-    pool: &PgPool,
+    db: &Database,
     user_id: Uuid,
     alert_id: Uuid,
 ) -> Result<(), ServiceError> {
     // Delete the alert
-    Alert::delete(pool, alert_id, user_id).await?;
+    Alert::delete(db, alert_id, user_id).await?;
     Ok(())
 } 

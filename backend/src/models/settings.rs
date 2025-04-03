@@ -1,10 +1,12 @@
+use bson::{doc, Document};
 use chrono::{DateTime, Utc};
+use mongodb::{Collection, Database};
 use serde::{Deserialize, Serialize};
-use sqlx::PgPool;
 use uuid::Uuid;
 
 #[derive(Debug, Serialize, Deserialize)]
 pub struct Settings {
+    #[serde(rename = "_id")]
     pub id: Uuid,
     pub user_id: Uuid,
     pub min_wallet_balance: f64,
@@ -17,80 +19,80 @@ pub struct Settings {
 }
 
 impl Settings {
-    pub async fn find_by_user(pool: &PgPool, user_id: Uuid) -> Result<Option<Self>, sqlx::Error> {
-        sqlx::query_as!(
-            Self,
-            r#"
-            SELECT * FROM settings WHERE user_id = $1
-            "#,
-            user_id
-        )
-        .fetch_optional(pool)
-        .await
+    pub fn collection(db: &Database) -> Collection<Self> {
+        db.collection::<Self>("settings")
+    }
+
+    pub async fn find_by_user(db: &Database, user_id: Uuid) -> Result<Option<Self>, mongodb::error::Error> {
+        let filter = doc! { "user_id": user_id };
+        Self::collection(db).find_one(filter, None).await
     }
 
     pub async fn create_or_update(
-        pool: &PgPool,
+        db: &Database,
         user_id: Uuid,
         min_wallet_balance: Option<f64>,
         default_allocation_percentage: Option<f64>,
         risk_level: Option<&str>,
         notification_email: Option<&str>,
         auto_rebalance: Option<bool>,
-    ) -> Result<Self, sqlx::Error> {
+    ) -> Result<Self, mongodb::error::Error> {
         // Check if settings exist for this user
-        let existing = Self::find_by_user(pool, user_id).await?;
+        let existing = Self::find_by_user(db, user_id).await?;
 
         if let Some(settings) = existing {
             // Update existing settings
-            sqlx::query_as!(
-                Self,
-                r#"
-                UPDATE settings
-                SET min_wallet_balance = COALESCE($3, min_wallet_balance),
-                    default_allocation_percentage = COALESCE($4, default_allocation_percentage),
-                    risk_level = COALESCE($5, risk_level),
-                    notification_email = COALESCE($6, notification_email),
-                    auto_rebalance = COALESCE($7, auto_rebalance),
-                    updated_at = $8
-                WHERE id = $1 AND user_id = $2
-                RETURNING *
-                "#,
-                settings.id,
-                user_id,
-                min_wallet_balance,
-                default_allocation_percentage,
-                risk_level,
-                notification_email,
-                auto_rebalance,
-                Utc::now()
-            )
-            .fetch_one(pool)
-            .await
+            let filter = doc! { "_id": settings.id };
+            let now = Utc::now();
+            
+            let mut update_doc = doc! { "updated_at": now };
+            
+            if let Some(min_balance) = min_wallet_balance {
+                update_doc.insert("min_wallet_balance", min_balance);
+            }
+            
+            if let Some(allocation) = default_allocation_percentage {
+                update_doc.insert("default_allocation_percentage", allocation);
+            }
+            
+            if let Some(risk) = risk_level {
+                update_doc.insert("risk_level", risk);
+            }
+            
+            if let Some(email) = notification_email {
+                update_doc.insert("notification_email", email);
+            }
+            
+            if let Some(rebalance) = auto_rebalance {
+                update_doc.insert("auto_rebalance", rebalance);
+            }
+            
+            let update = doc! { "$set": update_doc };
+            
+            Self::collection(db).update_one(filter.clone(), update, None).await?;
+            
+            // Fetch the updated document
+            let updated = Self::collection(db).find_one(filter, None).await?
+                .ok_or_else(|| mongodb::error::Error::from(mongodb::error::ErrorKind::InvalidArgument { message: "Settings not found after update".into() }))?;
+            
+            Ok(updated)
         } else {
             // Create new settings
-            sqlx::query_as!(
-                Self,
-                r#"
-                INSERT INTO settings (
-                    id, user_id, min_wallet_balance, default_allocation_percentage,
-                    risk_level, notification_email, auto_rebalance, created_at, updated_at
-                )
-                VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
-                RETURNING *
-                "#,
-                Uuid::new_v4(),
+            let now = Utc::now();
+            let settings = Self {
+                id: Uuid::new_v4(),
                 user_id,
-                min_wallet_balance.unwrap_or(0.1),
-                default_allocation_percentage.unwrap_or(10.0),
-                risk_level.unwrap_or("medium"),
-                notification_email,
-                auto_rebalance.unwrap_or(false),
-                Utc::now(),
-                Utc::now()
-            )
-            .fetch_one(pool)
-            .await
+                min_wallet_balance: min_wallet_balance.unwrap_or(0.1),
+                default_allocation_percentage: default_allocation_percentage.unwrap_or(10.0),
+                risk_level: risk_level.unwrap_or("medium").to_string(),
+                notification_email: notification_email.map(|s| s.to_string()),
+                auto_rebalance: auto_rebalance.unwrap_or(false),
+                created_at: now,
+                updated_at: now,
+            };
+
+            Self::collection(db).insert_one(&settings, None).await?;
+            Ok(settings)
         }
     }
 } 

@@ -1,10 +1,12 @@
+use bson::{doc, Document};
 use chrono::{DateTime, Utc};
+use mongodb::{Collection, Database};
 use serde::{Deserialize, Serialize};
-use sqlx::PgPool;
 use uuid::Uuid;
 
 #[derive(Debug, Serialize, Deserialize)]
 pub struct Alert {
+    #[serde(rename = "_id")]
     pub id: Uuid,
     pub user_id: Uuid,
     pub alert_type: String,
@@ -18,20 +20,18 @@ pub struct Alert {
 }
 
 impl Alert {
-    pub async fn find_by_user(pool: &PgPool, user_id: Uuid) -> Result<Vec<Self>, sqlx::Error> {
-        sqlx::query_as!(
-            Self,
-            r#"
-            SELECT * FROM alerts WHERE user_id = $1
-            "#,
-            user_id
-        )
-        .fetch_all(pool)
-        .await
+    pub fn collection(db: &Database) -> Collection<Self> {
+        db.collection::<Self>("alerts")
+    }
+
+    pub async fn find_by_user(db: &Database, user_id: Uuid) -> Result<Vec<Self>, mongodb::error::Error> {
+        let filter = doc! { "user_id": user_id };
+        let cursor = Self::collection(db).find(filter, None).await?;
+        cursor.try_collect().await
     }
 
     pub async fn create(
-        pool: &PgPool,
+        db: &Database,
         user_id: Uuid,
         alert_type: &str,
         market_pair: &str,
@@ -39,43 +39,28 @@ impl Alert {
         percentage_change: Option<f64>,
         is_above: Option<bool>,
         enabled: bool,
-    ) -> Result<Self, sqlx::Error> {
-        sqlx::query_as!(
-            Self,
-            r#"
-            INSERT INTO alerts (
-                id, user_id, alert_type, market_pair, price_threshold,
-                percentage_change, is_above, enabled, created_at, updated_at
-            )
-            VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
-            RETURNING *
-            "#,
-            Uuid::new_v4(),
+    ) -> Result<Self, mongodb::error::Error> {
+        let now = Utc::now();
+        let alert = Self {
+            id: Uuid::new_v4(),
             user_id,
-            alert_type,
-            market_pair,
+            alert_type: alert_type.to_string(),
+            market_pair: market_pair.to_string(),
             price_threshold,
             percentage_change,
             is_above,
             enabled,
-            Utc::now(),
-            Utc::now()
-        )
-        .fetch_one(pool)
-        .await
+            created_at: now,
+            updated_at: now,
+        };
+
+        Self::collection(db).insert_one(&alert, None).await?;
+        Ok(alert)
     }
 
-    pub async fn delete(pool: &PgPool, id: Uuid, user_id: Uuid) -> Result<(), sqlx::Error> {
-        sqlx::query!(
-            r#"
-            DELETE FROM alerts WHERE id = $1 AND user_id = $2
-            "#,
-            id,
-            user_id
-        )
-        .execute(pool)
-        .await?;
-
+    pub async fn delete(db: &Database, id: Uuid, user_id: Uuid) -> Result<(), mongodb::error::Error> {
+        let filter = doc! { "_id": id, "user_id": user_id };
+        Self::collection(db).delete_one(filter, None).await?;
         Ok(())
     }
 } 

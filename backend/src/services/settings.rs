@@ -1,4 +1,4 @@
-use sqlx::PgPool;
+use mongodb::Database;
 use uuid::Uuid;
 
 use crate::api::settings::SettingsRequest;
@@ -6,17 +6,17 @@ use crate::models::settings::Settings;
 use crate::utils::errors::ServiceError;
 
 pub async fn get_user_settings(
-    pool: &PgPool,
+    db: &Database,
     user_id: Uuid,
 ) -> Result<Settings, ServiceError> {
-    let settings = Settings::find_by_user(pool, user_id).await?
+    let settings = Settings::find_by_user(db, user_id).await?
         .ok_or_else(|| ServiceError::NotFound("Settings not found".into()))?;
     
     Ok(settings)
 }
 
 pub async fn update_user_settings(
-    pool: &PgPool,
+    db: &Database,
     user_id: Uuid,
     req: SettingsRequest,
 ) -> Result<Settings, ServiceError> {
@@ -41,7 +41,7 @@ pub async fn update_user_settings(
     
     // Update settings
     let settings = Settings::create_or_update(
-        pool,
+        db,
         user_id,
         req.min_wallet_balance,
         req.default_allocation_percentage,

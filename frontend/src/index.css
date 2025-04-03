@@ -1,0 +1,94 @@
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@import url('https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600;700&display=swap');
+
+@layer base {
+  :root {
+    --background: 225 30% 10%;
+    --foreground: 210 40% 98%;
+
+    --card: 225 25% 15%;
+    --card-foreground: 210 40% 98%;
+
+    --popover: 225 25% 12%;
+    --popover-foreground: 210 40% 98%;
+
+    --primary: 270 100% 64%;
+    --primary-foreground: 210 40% 98%;
+
+    --secondary: 178 95% 51%;
+    --secondary-foreground: 222.2 47.4% 11.2%;
+
+    --muted: 225 25% 20%;
+    --muted-foreground: 210 20% 70%;
+
+    --accent: 260 95% 65%;
+    --accent-foreground: 210 40% 98%;
+
+    --destructive: 0 70% 50%;
+    --destructive-foreground: 210 40% 98%;
+
+    --border: 225 25% 20%;
+    --input: 225 25% 25%;
+    --ring: 270 100% 64%;
+
+    --radius: 0.5rem;
+
+    --sidebar-background: 230 25% 8%;
+    --sidebar-foreground: 210 40% 98%;
+    --sidebar-primary: 270 100% 64%;
+    --sidebar-primary-foreground: 0 0% 98%;
+    --sidebar-accent: 225 25% 15%;
+    --sidebar-accent-foreground: 210 40% 98%;
+    --sidebar-border: 225 25% 15%;
+    --sidebar-ring: 217.2 91.2% 59.8%;
+  }
+}
+
+@layer base {
+  * {
+    @apply border-border;
+  }
+
+  body {
+    @apply bg-background text-foreground;
+    font-feature-settings: "rlig" 1, "calt" 1;
+  }
+}
+
+@layer components {
+  .stats-card {
+    @apply bg-card rounded-lg border border-border p-4 transition-all duration-200 hover:shadow-md hover:shadow-primary/20;
+  }
+  
+  .table-row-hover {
+    @apply hover:bg-muted/50 transition-colors duration-150;
+  }
+  
+  .data-value {
+    @apply font-mono font-medium;
+  }
+  
+  .data-positive {
+    @apply text-solana-green;
+  }
+  
+  .data-negative {
+    @apply text-destructive;
+  }
+
+  .orderbook-ask {
+    @apply bg-destructive/20 border-r-2 border-destructive transition-all duration-300;
+  }
+
+  .orderbook-bid {
+    @apply bg-solana-green/20 border-r-2 border-solana-green transition-all duration-300;
+  }
+
+  .orderbook-row {
+    @apply text-xs font-mono py-0.5 flex items-center justify-between cursor-pointer hover:bg-muted/60;
+  }
+}

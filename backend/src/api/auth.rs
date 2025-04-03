@@ -1,5 +1,6 @@
 use actix_web::{web, HttpResponse, Responder, post};
 use serde::{Deserialize, Serialize};
+use mongodb::Database;
 use crate::services::auth::{login_user, register_user};
 use crate::utils::errors::ServiceError;
 
@@ -26,9 +27,9 @@ pub struct AuthResponse {
 #[post("/login")]
 async fn login(
     req: web::Json<LoginRequest>,
-    db_pool: web::Data<sqlx::PgPool>,
+    db: web::Data<Database>,
 ) -> impl Responder {
-    match login_user(&db_pool, &req.email, &req.password).await {
+    match login_user(&db, &req.email, &req.password).await {
         Ok((user, token)) => HttpResponse::Ok().json(AuthResponse {
             token,
             user_id: user.id,
@@ -44,9 +45,9 @@ async fn login(
 #[post("/register")]
 async fn register(
     req: web::Json<RegisterRequest>,
-    db_pool: web::Data<sqlx::PgPool>,
+    db: web::Data<Database>,
 ) -> impl Responder {
-    match register_user(&db_pool, &req.email, &req.password, &req.name).await {
+    match register_user(&db, &req.email, &req.password, &req.name).await {
         Ok((user, token)) => HttpResponse::Created().json(AuthResponse {
             token,
             user_id: user.id,

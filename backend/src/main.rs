@@ -1,5 +1,5 @@
 use actix_cors::Cors;
-use actix_web::{middleware::Logger, App, HttpServer};
+use actix_web::{middleware::Logger, web, App, HttpServer};
 use dotenv::dotenv;
 use log::info;
 use std::env;
@@ -15,6 +15,9 @@ mod utils;
 async fn main() -> std::io::Result<()> {
     dotenv().ok();
     env_logger::init_from_env(env_logger::Env::new().default_filter_or("info"));
+
+    let config = config::Config::from_env();
+    let db = db::init_db(&config).await;
 
     let host = env::var("HOST").unwrap_or_else(|_| "127.0.0.1".to_string());
     let port = env::var("PORT").unwrap_or_else(|_| "8080".to_string());
@@ -32,6 +35,8 @@ async fn main() -> std::io::Result<()> {
         App::new()
             .wrap(cors)
             .wrap(Logger::default())
+            .app_data(web::Data::new(db.clone()))
+            .app_data(web::Data::new(config.clone()))
             .configure(api::config)
     })
     .bind(server_url)?

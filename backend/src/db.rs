@@ -1,13 +1,15 @@
 use crate::config::Config;
-use sqlx::postgres::PgPoolOptions;
-use sqlx::PgPool;
+use mongodb::{Client, Database};
 use std::time::Duration;
 
-pub async fn init_pool(config: &Config) -> PgPool {
-    PgPoolOptions::new()
-        .max_connections(5)
-        .acquire_timeout(Duration::from_secs(3))
-        .connect(&config.database_url)
+pub async fn init_db(config: &Config) -> Database {
+    let client_options = mongodb::options::ClientOptions::parse(&config.mongodb_uri)
         .await
-        .expect("Failed to create database connection pool")
+        .expect("Failed to parse MongoDB connection string");
+    
+    let client = Client::with_options(client_options)
+        .expect("Failed to create MongoDB client");
+    
+    // Get a handle to the database
+    client.database(&config.mongodb_database)
 } 

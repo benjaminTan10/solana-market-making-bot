@@ -1,5 +1,5 @@
 use bcrypt::{hash, verify, DEFAULT_COST};
-use sqlx::PgPool;
+use mongodb::Database;
 use uuid::Uuid;
 
 use crate::models::user::User;
@@ -7,13 +7,13 @@ use crate::utils::auth::generate_token;
 use crate::utils::errors::ServiceError;
 
 pub async fn register_user(
-    pool: &PgPool,
+    db: &Database,
     email: &str,
     password: &str,
     name: &str,
 ) -> Result<(User, String), ServiceError> {
     // Check if user already exists
-    if let Some(_) = User::find_by_email(pool, email).await? {
+    if let Some(_) = User::find_by_email(db, email).await? {
         return Err(ServiceError::Conflict("User with this email already exists".into()));
     }
     
@@ -21,7 +21,7 @@ pub async fn register_user(
     let password_hash = hash(password, DEFAULT_COST)?;
     
     // Create the user
-    let user = User::create(pool, email, name, &password_hash).await?;
+    let user = User::create(db, email, name, &password_hash).await?;
     
     // Generate a JWT token
     let token = generate_token(user.id)?;
@@ -30,12 +30,12 @@ pub async fn register_user(
 }
 
 pub async fn login_user(
-    pool: &PgPool,
+    db: &Database,
     email: &str,
     password: &str,
 ) -> Result<(User, String), ServiceError> {
     // Find the user
-    let user = User::find_by_email(pool, email).await?
+    let user = User::find_by_email(db, email).await?
         .ok_or_else(|| ServiceError::Unauthorized("Invalid email or password".into()))?;
     
     // Verify the password

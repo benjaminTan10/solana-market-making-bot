@@ -1,4 +1,5 @@
 use actix_web::{error::ResponseError, http::StatusCode, HttpResponse};
+use mongodb::error::{Error as MongoError, ErrorKind};
 use serde::Serialize;
 use std::fmt;
 use thiserror::Error;
@@ -48,11 +49,11 @@ impl ResponseError for ServiceError {
     }
 }
 
-impl From<sqlx::Error> for ServiceError {
-    fn from(error: sqlx::Error) -> ServiceError {
-        match error {
-            sqlx::Error::RowNotFound => ServiceError::NotFound("Resource not found".into()),
-            sqlx::Error::Database(e) if e.constraint().is_some() => {
+impl From<MongoError> for ServiceError {
+    fn from(error: MongoError) -> ServiceError {
+        match *error.kind {
+            ErrorKind::Command(ref cmd_err) if cmd_err.code == 11000 => {
+                // Duplicate key error
                 ServiceError::Conflict("Resource already exists".into())
             }
             _ => ServiceError::InternalServerError(error.to_string()),

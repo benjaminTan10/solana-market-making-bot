@@ -1,7 +1,8 @@
-
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { marketService } from '@/services/market';
+import { useQuery } from '@tanstack/react-query';
 import {
   AreaChart,
   Area,
@@ -52,6 +53,13 @@ export function PriceChart() {
   const [priceView, setPriceView] = useState<'market' | 'synthetic'>('market');
   const [timeRange, setTimeRange] = useState<TimeRange>('24H');
   
+  // Fetch market data using React Query
+  const { data: marketData, isLoading, error } = useQuery({
+    queryKey: ['marketData', 'SOL/USDC'],
+    queryFn: () => marketService.getMarketData('SOL/USDC'),
+    refetchInterval: 10000, // Refetch every 10 seconds
+  });
+
   // Use the appropriate dataset based on the selected view
   const data = priceView === 'market' ? solanaMarketData : solanaBotData;
   
@@ -62,6 +70,14 @@ export function PriceChart() {
     : 'from-solana-purple/20 to-solana-purple/5';
   
   const lineColor = priceView === 'market' ? '#1E90FF' : '#9945FF';
+  
+  if (isLoading) {
+    return <div>Loading...</div>;
+  }
+
+  if (error) {
+    return <div>Error loading market data</div>;
+  }
   
   return (
     <Card className="col-span-2 lg:col-span-3">

@@ -1,4 +1,4 @@
-# Solana Market Nexus Backend
+# Solana Market Maker bot backend and frontend
 
 A robust backend service for the Solana Market Nexus application, providing market making bot administration and management capabilities on the Solana blockchain.
 
